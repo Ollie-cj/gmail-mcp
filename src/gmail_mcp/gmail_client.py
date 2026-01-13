@@ -232,6 +232,75 @@ class GmailClient:
             for domain, data in sorted(unsubscribe_data.items())
         ]
 
+    def get_sent_emails(
+        self,
+        max_results: int = 500,
+        page_token: str | None = None,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """
+        Fetch sent emails with pagination support.
+
+        Args:
+            max_results: Maximum number of emails to return per call
+            page_token: Token for fetching next page of results
+
+        Returns:
+            Tuple of (emails list, next_page_token or None)
+        """
+        # Build request params
+        params: dict[str, Any] = {
+            "userId": "me",
+            "q": "in:sent",
+            "maxResults": min(max_results, 500),  # API max is 500
+        }
+        if page_token:
+            params["pageToken"] = page_token
+
+        results = self.service.users().messages().list(**params).execute()
+
+        messages = results.get("messages", [])
+        next_token = results.get("nextPageToken")
+
+        if not messages:
+            return [], None
+
+        # Batch fetch message details (100 at a time due to API limit)
+        emails: list[dict[str, Any]] = []
+
+        def handle_message(request_id: str, response: dict, exception: Exception | None):
+            if exception is not None:
+                return
+            headers = {h["name"]: h["value"] for h in response["payload"]["headers"]}
+            body = self._extract_body(response["payload"])
+
+            emails.append(
+                {
+                    "id": response["id"],
+                    "thread_id": response["threadId"],
+                    "to": headers.get("To", "Unknown"),
+                    "subject": headers.get("Subject", "(No subject)"),
+                    "body": body,
+                    "date": headers.get("Date", ""),
+                }
+            )
+
+        # Process in batches of 100 (Gmail API limit)
+        batch_size = 100
+        for i in range(0, len(messages), batch_size):
+            chunk = messages[i : i + batch_size]
+            batch: BatchHttpRequest = self.service.new_batch_http_request(
+                callback=handle_message
+            )
+            for msg in chunk:
+                batch.add(
+                    self.service.users()
+                    .messages()
+                    .get(userId="me", id=msg["id"], format="full")
+                )
+            batch.execute()
+
+        return emails, next_token
+
 
 _client: GmailClient | None = None
 
