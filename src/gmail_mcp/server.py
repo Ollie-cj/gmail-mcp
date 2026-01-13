@@ -80,6 +80,28 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="find_unsubscribe_links",
+            description=(
+                "Find unsubscribe links from recent emails to help clean up inbox. "
+                "Scans emails for List-Unsubscribe headers and returns unique "
+                "sender/unsubscribe link pairs. Use this to help users unsubscribe "
+                "from newsletters and mailing lists."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "max_results": {
+                        "type": "integer",
+                        "description": "Maximum number of emails to scan (default 200)",
+                        "default": 200,
+                        "minimum": 1,
+                        "maximum": 500,
+                    }
+                },
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -140,6 +162,27 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
         content = DEFAULT_STYLE_GUIDE_PATH.read_text()
         return [TextContent(type="text", text=content)]
+
+    elif name == "find_unsubscribe_links":
+        max_results = arguments.get("max_results", 200)
+        max_results = max(1, min(500, max_results))
+
+        client = get_gmail_client()
+        results = client.find_unsubscribe_links(max_results=max_results)
+
+        if not results:
+            return [
+                TextContent(
+                    type="text",
+                    text="No unsubscribe links found in recent emails.",
+                )
+            ]
+
+        # Format as "Sender - unsubscribe link"
+        lines = [f"{r['sender']} - {r['unsubscribe_link']}" for r in results]
+        output = f"Found {len(results)} subscriptions:\n\n" + "\n".join(lines)
+
+        return [TextContent(type="text", text=output)]
 
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]

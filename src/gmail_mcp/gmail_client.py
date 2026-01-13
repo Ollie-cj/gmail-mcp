@@ -1,6 +1,7 @@
 """Gmail API client wrapper."""
 
 import base64
+import re
 from email.mime.text import MIMEText
 from typing import Any
 
@@ -151,6 +152,78 @@ class GmailClient:
             "to": headers.get("From", ""),
             "subject": subject,
         }
+
+    def find_unsubscribe_links(self, max_results: int = 200) -> list[dict[str, str]]:
+        """
+        Find unsubscribe links from recent emails.
+
+        Looks for the List-Unsubscribe header in emails, which is the
+        standard way newsletters provide unsubscribe links.
+
+        Args:
+            max_results: Maximum number of emails to scan (default 200)
+
+        Returns:
+            List of dicts with sender and unsubscribe_link, deduplicated by sender
+        """
+        results = (
+            self.service.users()
+            .messages()
+            .list(userId="me", maxResults=max_results)
+            .execute()
+        )
+
+        messages = results.get("messages", [])
+        if not messages:
+            return []
+
+        # Use batch to fetch headers only (faster than full format)
+        unsubscribe_data: dict[str, str] = {}  # sender -> link (deduped)
+
+        def handle_message(request_id: str, response: dict, exception: Exception | None):
+            if exception is not None:
+                return
+            headers = {h["name"]: h["value"] for h in response["payload"]["headers"]}
+
+            list_unsubscribe = headers.get("List-Unsubscribe", "")
+            if not list_unsubscribe:
+                return
+
+            # Extract HTTP URL from List-Unsubscribe header
+            # Format: <https://...>, <mailto:...> or both
+            http_match = re.search(r"<(https?://[^>]+)>", list_unsubscribe)
+            if http_match:
+                link = http_match.group(1)
+                sender = headers.get("From", "Unknown")
+                # Deduplicate by sender domain/name
+                if sender not in unsubscribe_data:
+                    unsubscribe_data[sender] = link
+
+        # Gmail batch API has a limit of 100 requests per batch
+        batch_size = 100
+        for i in range(0, len(messages), batch_size):
+            chunk = messages[i : i + batch_size]
+            batch: BatchHttpRequest = self.service.new_batch_http_request(
+                callback=handle_message
+            )
+            for msg in chunk:
+                batch.add(
+                    self.service.users()
+                    .messages()
+                    .get(
+                        userId="me",
+                        id=msg["id"],
+                        format="metadata",
+                        metadataHeaders=["From", "List-Unsubscribe"],
+                    )
+                )
+            batch.execute()
+
+        # Convert to list format
+        return [
+            {"sender": sender, "unsubscribe_link": link}
+            for sender, link in sorted(unsubscribe_data.items())
+        ]
 
 
 _client: GmailClient | None = None
