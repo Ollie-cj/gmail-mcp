@@ -4,13 +4,22 @@ An MCP (Model Context Protocol) server that allows AI assistants to read unread 
 
 ## Overview
 
-This server provides three tools for AI assistants:
+This server provides tools for AI assistants to manage Gmail:
+
+### Core Tools
 
 | Tool | Description |
 |------|-------------|
 | `get_unread_emails` | Fetch unread emails with sender, subject, body/snippet, and thread IDs |
 | `create_draft_reply` | Create a properly threaded draft reply to an email |
-| `get_style_guide` | Get email writing style guide for better replies (stretch goal)
+| `get_style_guide` | Get email writing style guide for better replies |
+
+### Writing Style Tools (RAG-based)
+
+| Tool | Description |
+|------|-------------|
+| `sync_sent_emails` | Download and index sent emails for style matching |
+| `get_writing_examples` | Find similar emails from your sent folder as style examples |
 
 ## Project Structure
 
@@ -21,7 +30,8 @@ gmail-mcp/
 │       ├── __init__.py       # Package init
 │       ├── server.py         # MCP server with tool definitions
 │       ├── gmail_client.py   # Gmail API wrapper
-│       └── auth.py           # OAuth 2.0 authentication
+│       ├── auth.py           # OAuth 2.0 authentication
+│       └── corpus.py         # RAG email corpus with embeddings
 ├── examples/
 │   └── style_guide.md        # Example style guide template
 ├── pyproject.toml            # Project config and dependencies
@@ -118,6 +128,10 @@ Once configured, you can ask Claude:
 
 > "Read my latest unread email and help me write a professional response"
 
+> "Sync my sent emails so you can learn my writing style"
+
+> "Find examples of how I usually write to colleagues, then draft a reply matching my style"
+
 ## Gmail API Scopes
 
 This server requests the following OAuth scopes:
@@ -144,7 +158,7 @@ pytest
 - The server only creates **drafts**, never sends emails automatically
 - Tokens can be revoked at [Google Account Permissions](https://myaccount.google.com/permissions)
 
-## Style Guide (Stretch Goal)
+## Style Guide
 
 The `get_style_guide` tool reads from `~/.gmail-mcp/style_guide.md`. Copy the example to get started:
 
@@ -152,7 +166,32 @@ The `get_style_guide` tool reads from `~/.gmail-mcp/style_guide.md`. Copy the ex
 cp examples/style_guide.md ~/.gmail-mcp/style_guide.md
 ```
 
-Edit the file to customize your email tone, templates, and preferences. Claude will use this context when drafting replies.
+Edit the file to customize your email tone, templates, and preferences.
+
+## Writing Style Matching (RAG)
+
+The server includes a RAG (Retrieval Augmented Generation) system that learns from your sent emails:
+
+### Setup
+
+```bash
+# In Claude Desktop, ask:
+"Sync my sent emails for style matching"
+```
+
+This downloads and indexes your sent emails locally using:
+- **ChromaDB** - Local vector database (`~/.gmail-mcp/corpus/`)
+- **sentence-transformers** - Local embeddings (no API key needed)
+
+### Usage
+
+When drafting replies, Claude can find similar emails you've written:
+
+> "Find examples of how I write to clients about project updates"
+
+> "Show me emails similar to this topic so I can match my usual style"
+
+The retrieved examples help Claude match your tone, vocabulary, and formatting.
 
 ## Roadmap
 
@@ -160,9 +199,10 @@ Edit the file to customize your email tone, templates, and preferences. Claude w
 - [x] OAuth 2.0 authentication flow
 - [x] `get_unread_emails` tool
 - [x] `create_draft_reply` tool
-- [x] `get_style_guide` tool (stretch goal)
+- [x] `get_style_guide` tool
+- [x] RAG-based writing style matching
+- [ ] Auto-generate style guide from corpus
 - [ ] Claude Desktop integration demo
-- [ ] Screenshots and example prompts
 
 ## License
 
