@@ -4,14 +4,13 @@ An MCP (Model Context Protocol) server that allows AI assistants to read unread 
 
 ## Overview
 
-This server provides two core tools for AI assistants:
+This server provides three tools for AI assistants:
 
 | Tool | Description |
 |------|-------------|
 | `get_unread_emails` | Fetch unread emails with sender, subject, body/snippet, and thread IDs |
 | `create_draft_reply` | Create a properly threaded draft reply to an email |
-
-**Stretch Goal:** A `get_style_guide` tool that pulls external context (style guides, templates) to help the AI write better replies.
+| `get_style_guide` | Get email writing style guide for better replies (stretch goal)
 
 ## Project Structure
 
@@ -23,6 +22,8 @@ gmail-mcp/
 │       ├── server.py         # MCP server with tool definitions
 │       ├── gmail_client.py   # Gmail API wrapper
 │       └── auth.py           # OAuth 2.0 authentication
+├── examples/
+│   └── style_guide.md        # Example style guide template
 ├── pyproject.toml            # Project config and dependencies
 ├── README.md                 # This file
 ├── .env.example              # Environment variables template
@@ -143,13 +144,23 @@ pytest
 - The server only creates **drafts**, never sends emails automatically
 - Tokens can be revoked at [Google Account Permissions](https://myaccount.google.com/permissions)
 
+## Style Guide (Stretch Goal)
+
+The `get_style_guide` tool reads from `~/.gmail-mcp/style_guide.md`. Copy the example to get started:
+
+```bash
+cp examples/style_guide.md ~/.gmail-mcp/style_guide.md
+```
+
+Edit the file to customize your email tone, templates, and preferences. Claude will use this context when drafting replies.
+
 ## Roadmap
 
 - [x] Project scaffold and documentation
-- [ ] OAuth 2.0 authentication flow
-- [ ] `get_unread_emails` tool
-- [ ] `create_draft_reply` tool
-- [ ] `get_style_guide` tool (stretch goal)
+- [x] OAuth 2.0 authentication flow
+- [x] `get_unread_emails` tool
+- [x] `create_draft_reply` tool
+- [x] `get_style_guide` tool (stretch goal)
 - [ ] Claude Desktop integration demo
 - [ ] Screenshots and example prompts
 
