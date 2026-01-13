@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from pathlib import Path
 from typing import Any
 
 from mcp.server import Server
@@ -11,6 +12,9 @@ from mcp.types import Tool, TextContent
 from .gmail_client import get_gmail_client
 
 server = Server("gmail-mcp")
+
+# Default path for style guide
+DEFAULT_STYLE_GUIDE_PATH = Path.home() / ".gmail-mcp" / "style_guide.md"
 
 
 @server.list_tools()
@@ -63,6 +67,19 @@ async def list_tools() -> list[Tool]:
                 "required": ["thread_id", "message_id", "reply_body"],
             },
         ),
+        Tool(
+            name="get_style_guide",
+            description=(
+                "Get the email writing style guide. "
+                "Use this to understand preferred tone, templates, and formatting "
+                "before drafting replies. Returns markdown content."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {},
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -107,6 +124,22 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
                 text=f"Draft created successfully!\n{json.dumps(result, indent=2)}",
             )
         ]
+
+    elif name == "get_style_guide":
+        if not DEFAULT_STYLE_GUIDE_PATH.exists():
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        f"No style guide found at {DEFAULT_STYLE_GUIDE_PATH}\n\n"
+                        "Create a markdown file with your email writing preferences, "
+                        "including tone, templates, and sign-off preferences."
+                    ),
+                )
+            ]
+
+        content = DEFAULT_STYLE_GUIDE_PATH.read_text()
+        return [TextContent(type="text", text=content)]
 
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
