@@ -154,6 +154,27 @@ async def list_tools() -> list[Tool]:
                 "required": ["query"],
             },
         ),
+        Tool(
+            name="analyze_writing_style",
+            description=(
+                "Analyze your sent emails to extract writing patterns and style. "
+                "Returns statistics (greetings, sign-offs, sentence length, common phrases) "
+                "and sample emails. Use this data to create a personalized style guide."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "sample_size": {
+                        "type": "integer",
+                        "description": "Number of emails to analyze (default 50)",
+                        "default": 50,
+                        "minimum": 10,
+                        "maximum": 200,
+                    }
+                },
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -307,6 +328,67 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             output_parts.append(f"Subject: {ex['subject']}")
             output_parts.append(f"Date: {ex['date']}")
             output_parts.append(f"\n{ex['content']}\n")
+
+        return [TextContent(type="text", text="\n".join(output_parts))]
+
+    elif name == "analyze_writing_style":
+        sample_size = arguments.get("sample_size", 50)
+        sample_size = max(10, min(200, sample_size))
+
+        corpus = get_corpus()
+        analysis = corpus.analyze_writing_style(sample_size=sample_size)
+
+        if "error" in analysis:
+            return [TextContent(type="text", text=f"Error: {analysis['error']}")]
+
+        # Format the analysis for Claude to use
+        output_parts = [
+            "# Writing Style Analysis",
+            f"\nAnalyzed {analysis['emails_analyzed']} sent emails.\n",
+            "## Greetings Used",
+        ]
+
+        if analysis["greetings"]:
+            for greeting, count in analysis["greetings"]:
+                output_parts.append(f"- \"{greeting}\" ({count} times)")
+        else:
+            output_parts.append("- No common greetings detected")
+
+        output_parts.append("\n## Sign-offs Used")
+        if analysis["sign_offs"]:
+            for signoff, count in analysis["sign_offs"]:
+                output_parts.append(f"- \"{signoff}\" ({count} times)")
+        else:
+            output_parts.append("- No common sign-offs detected")
+
+        output_parts.extend([
+            f"\n## Sentence Statistics",
+            f"- Average sentence length: {analysis['avg_sentence_length_words']} words",
+            f"- Total sentences analyzed: {analysis['total_sentences_analyzed']}",
+            "\n## Common Phrases",
+            "\n### Two-word phrases:",
+        ])
+
+        for phrase in analysis["common_phrases"]["two_word"][:5]:
+            output_parts.append(f"- \"{phrase}\"")
+
+        output_parts.append("\n### Three-word phrases:")
+        for phrase in analysis["common_phrases"]["three_word"][:5]:
+            output_parts.append(f"- \"{phrase}\"")
+
+        output_parts.append("\n## Sample Emails (for tone reference)\n")
+        for i, email in enumerate(analysis["sample_emails"], 1):
+            output_parts.append(f"### Sample {i}")
+            output_parts.append(f"**To:** {email['to']}")
+            output_parts.append(f"**Subject:** {email['subject']}")
+            output_parts.append(f"```\n{email['body']}\n```\n")
+
+        output_parts.append(
+            "\n---\n"
+            "Use this analysis to create a personalized style guide. "
+            "Consider the greeting patterns, sign-offs, sentence length, "
+            "and tone from the samples."
+        )
 
         return [TextContent(type="text", text="\n".join(output_parts))]
 
