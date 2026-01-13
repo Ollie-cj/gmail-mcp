@@ -178,7 +178,8 @@ class GmailClient:
             return []
 
         # Use batch to fetch headers only (faster than full format)
-        unsubscribe_data: dict[str, str] = {}  # sender -> link (deduped)
+        # Keyed by domain for deduplication
+        unsubscribe_data: dict[str, dict[str, str]] = {}
 
         def handle_message(request_id: str, response: dict, exception: Exception | None):
             if exception is not None:
@@ -195,9 +196,15 @@ class GmailClient:
             if http_match:
                 link = http_match.group(1)
                 sender = headers.get("From", "Unknown")
-                # Deduplicate by sender domain/name
-                if sender not in unsubscribe_data:
-                    unsubscribe_data[sender] = link
+
+                # Extract domain from email for deduplication
+                # e.g. "Name <foo@example.com>" -> "example.com"
+                email_match = re.search(r"@([\w.-]+)", sender)
+                domain = email_match.group(1) if email_match else sender
+
+                # Deduplicate by domain
+                if domain not in unsubscribe_data:
+                    unsubscribe_data[domain] = {"sender": sender, "link": link}
 
         # Gmail batch API has a limit of 100 requests per batch
         batch_size = 100
@@ -219,10 +226,10 @@ class GmailClient:
                 )
             batch.execute()
 
-        # Convert to list format
+        # Convert to list format, sorted by domain
         return [
-            {"sender": sender, "unsubscribe_link": link}
-            for sender, link in sorted(unsubscribe_data.items())
+            {"sender": data["sender"], "unsubscribe_link": data["link"]}
+            for domain, data in sorted(unsubscribe_data.items())
         ]
 
 
