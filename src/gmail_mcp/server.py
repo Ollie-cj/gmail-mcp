@@ -10,6 +10,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
 
 from .gmail_client import get_gmail_client
+from .corpus import get_corpus
 
 server = Server("gmail-mcp")
 
@@ -102,6 +103,57 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="sync_sent_emails",
+            description=(
+                "Download and index sent emails for style matching. "
+                "Run this once to build a corpus of your writing style, "
+                "then use get_writing_examples to retrieve relevant examples. "
+                "This may take a few minutes on first run."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "max_emails": {
+                        "type": "integer",
+                        "description": "Maximum number of sent emails to sync (default 500)",
+                        "default": 500,
+                        "minimum": 10,
+                        "maximum": 2000,
+                    }
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="get_writing_examples",
+            description=(
+                "Find similar emails from your sent folder to use as style examples. "
+                "Use this before drafting replies to match your writing style. "
+                "Provide context like recipient or topic to find relevant examples."
+            ),
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Context to search for (e.g., topic, recipient name, or situation)",
+                    },
+                    "n_results": {
+                        "type": "integer",
+                        "description": "Number of examples to return (default 3)",
+                        "default": 3,
+                        "minimum": 1,
+                        "maximum": 10,
+                    },
+                    "recipient_filter": {
+                        "type": "string",
+                        "description": "Optional: filter by recipient email or name",
+                    },
+                },
+                "required": ["query"],
+            },
+        ),
     ]
 
 
@@ -183,6 +235,80 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         output = f"Found {len(results)} subscriptions:\n\n" + "\n".join(lines)
 
         return [TextContent(type="text", text=output)]
+
+    elif name == "sync_sent_emails":
+        max_emails = arguments.get("max_emails", 500)
+        max_emails = max(10, min(2000, max_emails))
+
+        corpus = get_corpus()
+        stats = corpus.sync_sent_emails(max_emails=max_emails)
+
+        return [
+            TextContent(
+                type="text",
+                text=(
+                    f"Sync complete!\n"
+                    f"- Downloaded: {stats['downloaded']} emails\n"
+                    f"- Embedded: {stats['embedded']} emails\n"
+                    f"- Skipped (already indexed or empty): {stats['skipped']}"
+                ),
+            )
+        ]
+
+    elif name == "get_writing_examples":
+        query = arguments.get("query", "")
+        n_results = arguments.get("n_results", 3)
+        recipient_filter = arguments.get("recipient_filter")
+
+        if not query:
+            return [
+                TextContent(
+                    type="text",
+                    text="Error: query is required to find similar emails.",
+                )
+            ]
+
+        corpus = get_corpus()
+
+        # Check if corpus has data
+        stats = corpus.get_corpus_stats()
+        if stats["total_emails"] == 0:
+            return [
+                TextContent(
+                    type="text",
+                    text=(
+                        "No emails in corpus yet. "
+                        "Run sync_sent_emails first to index your sent emails."
+                    ),
+                )
+            ]
+
+        examples = corpus.find_similar_emails(
+            query=query,
+            n_results=n_results,
+            recipient_filter=recipient_filter,
+        )
+
+        if not examples:
+            return [
+                TextContent(
+                    type="text",
+                    text="No similar emails found for the given query.",
+                )
+            ]
+
+        # Format examples for context
+        output_parts = [f"Found {len(examples)} similar emails from your sent folder:\n"]
+
+        for i, ex in enumerate(examples, 1):
+            similarity = f" (similarity: {ex['similarity']:.2f})" if ex['similarity'] else ""
+            output_parts.append(f"--- Example {i}{similarity} ---")
+            output_parts.append(f"To: {ex['to']}")
+            output_parts.append(f"Subject: {ex['subject']}")
+            output_parts.append(f"Date: {ex['date']}")
+            output_parts.append(f"\n{ex['content']}\n")
+
+        return [TextContent(type="text", text="\n".join(output_parts))]
 
     else:
         return [TextContent(type="text", text=f"Unknown tool: {name}")]
