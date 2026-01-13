@@ -13,6 +13,7 @@ This server provides tools for AI assistants to manage Gmail:
 | `get_unread_emails` | Fetch unread emails with sender, subject, body/snippet, and thread IDs |
 | `create_draft_reply` | Create a properly threaded draft reply to an email |
 | `get_style_guide` | Get email writing style guide for better replies |
+| `find_unsubscribe_links` | Find unsubscribe links from newsletters to help clean up inbox |
 
 ### Writing Style Tools (RAG-based)
 
@@ -20,6 +21,7 @@ This server provides tools for AI assistants to manage Gmail:
 |------|-------------|
 | `sync_sent_emails` | Download and index sent emails for style matching |
 | `get_writing_examples` | Find similar emails from your sent folder as style examples |
+| `analyze_writing_style` | Auto-generate a style guide from your sent email patterns |
 
 ## Project Structure
 
@@ -132,6 +134,10 @@ Once configured, you can ask Claude:
 
 > "Find examples of how I usually write to colleagues, then draft a reply matching my style"
 
+> "Analyze my writing style and generate a style guide"
+
+> "Find unsubscribe links so I can clean up my inbox"
+
 ## Gmail API Scopes
 
 This server requests the following OAuth scopes:
@@ -193,6 +199,18 @@ When drafting replies, Claude can find similar emails you've written:
 
 The retrieved examples help Claude match your tone, vocabulary, and formatting.
 
+### Auto-Generate Style Guide
+
+You can automatically generate a style guide from your sent emails:
+
+> "Analyze my writing style and create a style guide"
+
+This extracts patterns from your corpus including:
+- Common greetings and sign-offs
+- Average sentence length and vocabulary
+- Frequently used phrases
+- Sample emails for tone reference
+
 ## Roadmap
 
 - [x] Project scaffold and documentation
@@ -200,8 +218,9 @@ The retrieved examples help Claude match your tone, vocabulary, and formatting.
 - [x] `get_unread_emails` tool
 - [x] `create_draft_reply` tool
 - [x] `get_style_guide` tool
+- [x] `find_unsubscribe_links` tool
 - [x] RAG-based writing style matching
-- [ ] Auto-generate style guide from corpus
+- [x] Auto-generate style guide from corpus
 - [ ] Claude Desktop integration demo
 
 ## License
