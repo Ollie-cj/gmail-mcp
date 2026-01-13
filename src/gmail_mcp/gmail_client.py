@@ -5,6 +5,7 @@ from email.mime.text import MIMEText
 from typing import Any
 
 from googleapiclient.discovery import build, Resource
+from googleapiclient.http import BatchHttpRequest
 
 from .auth import get_credentials
 
@@ -25,7 +26,7 @@ class GmailClient:
 
     def get_unread_emails(self, max_results: int = 10) -> list[dict[str, Any]]:
         """
-        Fetch unread emails from inbox.
+        Fetch unread emails from inbox using batch requests for speed.
 
         Args:
             max_results: Maximum number of emails to return
@@ -41,30 +42,35 @@ class GmailClient:
         )
 
         messages = results.get("messages", [])
-        emails = []
+        if not messages:
+            return []
 
-        for msg in messages:
-            message = (
-                self.service.users()
-                .messages()
-                .get(userId="me", id=msg["id"], format="full")
-                .execute()
-            )
+        # Use batch request to fetch all messages in one round-trip
+        emails: list[dict[str, Any]] = []
 
-            headers = {h["name"]: h["value"] for h in message["payload"]["headers"]}
-            body = self._extract_body(message["payload"])
-
+        def handle_message(request_id: str, response: dict, exception: Exception | None):
+            if exception is not None:
+                return
+            headers = {h["name"]: h["value"] for h in response["payload"]["headers"]}
+            body = self._extract_body(response["payload"])
             emails.append(
                 {
-                    "id": message["id"],
-                    "thread_id": message["threadId"],
+                    "id": response["id"],
+                    "thread_id": response["threadId"],
                     "sender": headers.get("From", "Unknown"),
                     "subject": headers.get("Subject", "(No subject)"),
-                    "snippet": message.get("snippet", ""),
+                    "snippet": response.get("snippet", ""),
                     "body": body,
                     "date": headers.get("Date", ""),
                 }
             )
+
+        batch: BatchHttpRequest = self.service.new_batch_http_request(callback=handle_message)
+        for msg in messages:
+            batch.add(
+                self.service.users().messages().get(userId="me", id=msg["id"], format="full")
+            )
+        batch.execute()
 
         return emails
 
